@@ -31,8 +31,8 @@ void print_usage (const char* argmt){
 void proc_exit(){
 	pid_t pid;
 	while ((pid = waitpid(-1, 0, WNOHANG)) > 0) {
-    	counter--;
     	printf("Current Simultaneous Processes: %d\n", counter);
+    	counter--;
     	total_fin++;
     }
 }
@@ -98,6 +98,7 @@ int main (int argc, char *argv[]){
 	}
 	
 	while (counter > 0) {
+		counter--;
 		wait(NULL);
 	}
 
