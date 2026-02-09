@@ -20,5 +20,5 @@ int main (int argc, const char *argv[]){
 		sleep(1);
 		fprintf(stderr, "USER PID: %d PPID: %d Iteration: %d after sleeping\n", pid, ppid, j+1);
 	}
-	
+	return 0;
 }
