@@ -9,6 +9,7 @@
 #include <sys/signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
 #include <errno.h>
 
 volatile sig_atomic_t counter = 0;
@@ -38,10 +39,7 @@ void proc_exit(int signum){
 }
 
 int main (int argc, char *argv[]){
-	pid_t userpid = 0;
-	int i, j;
-	int status;
-	
+	pid_t userpid;
     char opt;
     options_t options;
 
@@ -71,26 +69,37 @@ int main (int argc, char *argv[]){
 				return (EXIT_FAILURE);		
 		}
 		
-	if (signal (SIGCHLD, proc_exit) == SIG_ERR) {
-		perror("SIGCHLD error\n");
+	struct sigaction sigact;
+    sigact.sa_handler = proc_exit;
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = SA_RESTART;
+		
+	if (sigaction(SIGCHLD, &sigact, NULL) == -1) {
+		perror("Sigaction error\n");
 		exit(EXIT_FAILURE);
 	}
 	
+	sigset_t mask, oldmask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+	
 	while (total_launched < options.proc) {
-		if (counter >= options.simul){
-            pause();
-            continue;
+		if (counter >= options.simul) {
+            sigprocmask(SIG_BLOCK, &mask, &oldmask);
+            while (counter >= options.simul) {
+                sigsuspend(&oldmask);
+            }
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);
         }
+        
 		userpid = fork();
+		
 		if (userpid == 0){
 			printf("New child process launched.\n");
-            char *newargv[3];
             char iterBuf[20];
-            sprintf(iterBuf, "%d",options.iter);
-            newargv[0] = "./user";
-            newargv[1] = iterBuf;
-            newargv[2] = NULL;
-            execvp("./user",newargv);
+            snprintf(iterBuf, sizeof(iterBuf), "%d", options.iter);
+           	char *newargv[] = {"./user", iterBuf, NULL};
+            execvp(newargv[0],newargv);
             perror("Execvp error\n");
             _exit(EXIT_FAILURE);
         } else if (userpid > 0){
@@ -102,9 +111,14 @@ int main (int argc, char *argv[]){
 		}  
 	}
 	
+	sigprocmask(SIG_BLOCK, &mask, &oldmask);
+	
 	while (total_fin < options.proc) {
-		pause();
+		sigsuspend(&oldmask);
 	}
+	
+    sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
 
 	printf("Total number of processes finished: %d\n", total_fin);
 	
