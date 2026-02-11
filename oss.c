@@ -9,6 +9,7 @@
 #include <sys/signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <errno.h>
 
 int counter = 0;
 int total_launched = 0;
@@ -71,17 +72,18 @@ int main (int argc, char *argv[]){
 				return (EXIT_FAILURE);		
 		}
 		
-	signal (SIGCHLD, proc_exit);
+	if (signal (SIGCHLD, proc_exit) == SIG_ERR) {
+		perror("SIGCHLD error\n");
+		exit(EXIT_FAILURE);
+	}
+	
 	while (total_launched < options.proc) {
 		if (counter >= options.simul){
             waitpid(userpid,0,0);
             continue;
         }
 		userpid = fork();
-		if (userpid < 0){
-			perror("Fork error\n");
-			exit(EXIT_FAILURE);
-		} else if (userpid == 0){
+		if (userpid == 0){
 			printf("New child process launched.\n");
             char *newargv[3];
             char iterBuf[20];
@@ -91,10 +93,13 @@ int main (int argc, char *argv[]){
             newargv[2] = NULL;
             execvp("./user",newargv);
             _exit(EXIT_SUCCESS);
-        } else {
-        	counter++;
+        } else if (userpid > 0){
+			counter++;
         	total_launched++;
-        }   
+		} else {
+			perror("Fork error\n");
+			exit(EXIT_FAILURE);
+		}  
 	}
 	
 	while (counter > 0) {
