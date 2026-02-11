@@ -11,9 +11,9 @@
 #include <unistd.h>
 #include <errno.h>
 
-int counter = 0;
+volatile sig_atomic_t counter = 0;
+volatile sig_atomic_t total_fin = 0;
 int total_launched = 0;
-int total_fin = 0;
 
 typedef struct {
     int proc;
@@ -29,10 +29,9 @@ void print_usage (const char* argmt){
 	fprintf(stderr, "Default proc is 9, default simul is 3, default iter is 5.\n");
 }
 
-void proc_exit(){
+void proc_exit(int signum){
 	pid_t pid;
-	while ((pid = waitpid(-1, 0, WNOHANG)) > 0) {
-    	printf("Current Simultaneous Processes: %d\n", counter);
+	while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
     	counter--;
     	total_fin++;
     }
@@ -79,7 +78,7 @@ int main (int argc, char *argv[]){
 	
 	while (total_launched < options.proc) {
 		if (counter >= options.simul){
-            waitpid(userpid,0,0);
+            pause();
             continue;
         }
 		userpid = fork();
@@ -92,7 +91,8 @@ int main (int argc, char *argv[]){
             newargv[1] = iterBuf;
             newargv[2] = NULL;
             execvp("./user",newargv);
-            _exit(EXIT_SUCCESS);
+            perror("Execvp error\n");
+            _exit(EXIT_FAILURE);
         } else if (userpid > 0){
 			counter++;
         	total_launched++;
@@ -102,10 +102,8 @@ int main (int argc, char *argv[]){
 		}  
 	}
 	
-	while (counter > 0) {
-		counter--;
-		printf("Waiting\n");
-		wait(NULL);
+	while (total_fin < options.proc) {
+		pause();
 	}
 
 	printf("Total number of processes finished: %d\n", total_fin);
