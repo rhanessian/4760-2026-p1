@@ -12,8 +12,8 @@
 #include <signal.h>
 #include <errno.h>
 
-volatile sig_atomic_t counter = 0;
-volatile sig_atomic_t total_fin = 0;
+int counter = 0;
+int total_fin = 0;
 int total_launched = 0;
 
 typedef struct {
@@ -28,14 +28,6 @@ void print_usage (const char* argmt){
 	fprintf(stderr, "	simul is the number of processes that can run simultaneously\n");
 	fprintf(stderr, "	iter is the number to be passed to the user processes\n");
 	fprintf(stderr, "Default proc is 9, default simul is 3, default iter is 5.\n");
-}
-
-void proc_exit(int signum){
-	pid_t pid;
-	while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
-    	counter--;
-    	total_fin++;
-    }
 }
 
 int main (int argc, char *argv[]){
@@ -68,28 +60,13 @@ int main (int argc, char *argv[]){
 				print_usage (argv[0]);
 				return (EXIT_FAILURE);		
 		}
-		
-	struct sigaction sigact;
-    sigact.sa_handler = proc_exit;
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = SA_RESTART;
-		
-	if (sigaction(SIGCHLD, &sigact, NULL) == -1) {
-		perror("Sigaction error\n");
-		exit(EXIT_FAILURE);
-	}
-	
-	sigset_t mask, oldmask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
 	
 	while (total_launched < options.proc) {
 		if (counter >= options.simul) {
-            sigprocmask(SIG_BLOCK, &mask, &oldmask);
-            while (counter >= options.simul) {
-                sigsuspend(&oldmask);
-            }
-            sigprocmask(SIG_UNBLOCK, &mask, NULL);
+            wait(NULL);
+            total_fin++;
+            counter--;
+            continue;
         }
         
 		userpid = fork();
@@ -111,13 +88,11 @@ int main (int argc, char *argv[]){
 		}  
 	}
 	
-	sigprocmask(SIG_BLOCK, &mask, &oldmask);
-	
-	while (total_fin < options.proc) {
-		sigsuspend(&oldmask);
+	while (counter > 0) {
+		wait(NULL);
+		counter--;
+		total_fin++;
 	}
-	
-    sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
 
 	printf("Total number of processes finished: %d\n", total_fin);
